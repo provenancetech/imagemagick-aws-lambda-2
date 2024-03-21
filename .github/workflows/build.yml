@@ -11,6 +11,13 @@ on:
         description: 'Stack name if not using default'
         required: false
         default: '-'
+      awsRegion:
+        required: true
+        description: AWS awsRegion
+        default: us-west-2
+        options:
+          - 'us-west-2'
+          - 'us-east-2'
 
 env:
   ENVIRONMENT: ${{ github.event.inputs.environment }}
@@ -29,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout Branch
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Set dev AWS credentials
         if: env.ENVIRONMENT == 'dev'
@@ -63,17 +70,17 @@ jobs:
           fi
 
       - name: Setup python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9.0'
+          python-version: '3.9'
 
       - name: Install python dependencies
-        uses: py-actions/py-dependency-install@v2
+        uses: py-actions/py-dependency-install@v4
         with:
           path: ".github/workflows/requirements.txt"
 
       - name: Configure AWS Region
-        run: echo "AWS_DEFAULT_REGION=us-west-2" >> $GITHUB_ENV
+        run: echo "AWS_DEFAULT_REGION=${{ github.event.inputs.awsRegion }}" >> $GITHUB_ENV
 
       - name: Run deploy (default stackname)
         if: env.NEW_STACK_NAME == '-'
