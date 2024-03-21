@@ -21,6 +21,7 @@ on:
 
 env:
   ENVIRONMENT: ${{ github.event.inputs.environment }}
+  AWS_REGION: ${{ github.event.inputs.awsRegion }}
   NEW_STACK_NAME: ${{ github.event.inputs.stackName }}
   DEV_AWS_ACCESS_KEY_ID: ${{ secrets.GHA_DEV_AWS_ACCESS_KEY }}
   DEV_AWS_SECRET_ACCESS_KEY: ${{ secrets.GHA_DEV_AWS_SECRET_KEY }}
@@ -39,7 +40,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set dev AWS credentials
-        if: env.ENVIRONMENT == 'dev'
+        if: env.ENVIRONMENT == 'dev' || env.ENVIRONMENT == 'dev-dr' || env.ENVIRONMENT == 'load'
         run: |
           echo "AWS_ACCESS_KEY_ID=${DEV_AWS_ACCESS_KEY_ID}" >> $GITHUB_ENV
           echo "AWS_SECRET_ACCESS_KEY=${DEV_AWS_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
@@ -51,7 +52,7 @@ jobs:
           echo "AWS_SECRET_ACCESS_KEY=${STAGING_AWS_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
 
       - name: Set prod AWS credentials
-        if: env.ENVIRONMENT == 'prod'
+        if: env.ENVIRONMENT == 'prod' || env.ENVIRONMENT == 'prod-dr'
         run: |
           echo "AWS_ACCESS_KEY_ID=${PROD_AWS_ACCESS_KEY_ID}" >> $GITHUB_ENV
           echo "AWS_SECRET_ACCESS_KEY=${PROD_AWS_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
@@ -80,13 +81,13 @@ jobs:
           path: ".github/workflows/requirements.txt"
 
       - name: Configure AWS Region
-        run: echo "AWS_DEFAULT_REGION=${{ github.event.inputs.awsRegion }}" >> $GITHUB_ENV
+        run: echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
 
       - name: Run deploy (default stackname)
         if: env.NEW_STACK_NAME == '-'
         shell: bash
         run: |
-          make all && make deploy DEPLOYMENT_BUCKET=pti-${{ env.ENVIRONMENT }}-cluster-assets-bucket STACK_NAME=serverlessrepo-pti-${{ env.ENVIRONMENT }}-image-magick-lambda-layer
+          make all && make deploy DEPLOYMENT_BUCKET=pti-${{ env.ENVIRONMENT }}-cluster-assets-bucket STACK_NAME=serverlessrepo-pti-${{ env.ENVIRONMENT }}-image-magick-lambda-layer2
 
       - name: Run deploy (Custom stackname)
         if: env.NEW_STACK_NAME != '-'
