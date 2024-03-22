@@ -7,6 +7,10 @@ on:
         description: 'Environment'
         required: true
         default: 'dev'
+      reason:
+        description: 'Reason'
+        required: true
+        default: 'dev'
       stackName:
         description: 'Stack name if not using default'
         required: false
@@ -21,6 +25,7 @@ on:
 
 env:
   ENVIRONMENT: ${{ github.event.inputs.environment }}
+  REASON: ${{ github.event.inputs.reason }}
   AWS_REGION: ${{ github.event.inputs.awsRegion }}
   NEW_STACK_NAME: ${{ github.event.inputs.stackName }}
   DEV_AWS_ACCESS_KEY_ID: ${{ secrets.GHA_DEV_AWS_ACCESS_KEY }}
@@ -87,10 +92,10 @@ jobs:
         if: env.NEW_STACK_NAME == '-'
         shell: bash
         run: |
-          make all && make deploy DEPLOYMENT_BUCKET=pti-${{ env.ENVIRONMENT }}-cluster-assets-bucket STACK_NAME=serverlessrepo-pti-${{ env.ENVIRONMENT }}-image-magick-lambda-layer2
+          make all && make deploy DEPLOYMENT_BUCKET=pti-${{ env.REASON }}-cluster-assets-bucket STACK_NAME=serverlessrepo-pti-${{ env.REASON }}-image-magick-lambda-layer2
 
       - name: Run deploy (Custom stackname)
         if: env.NEW_STACK_NAME != '-'
         shell: bash
         run: |
-          make all && make deploy DEPLOYMENT_BUCKET=pti-${{ env.ENVIRONMENT }}-cluster-assets-bucket STACK_NAME=${{ env.NEW_STACK_NAME }}
+          make all && make deploy DEPLOYMENT_BUCKET=pti-${{ env.REASON }}-cluster-assets-bucket STACK_NAME=${{ env.NEW_STACK_NAME }}
