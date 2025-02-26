@@ -1,10 +1,6 @@
 name: Deploy Lambda Layer
 permissions:
-  contents: read
-  pull-requests: write
-
-permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 on:
