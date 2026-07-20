@@ -2,6 +2,7 @@ name: Deploy Lambda Layer
 permissions:
   contents: write
   pull-requests: write
+  id-token: write
 
 on:
   workflow_dispatch:
@@ -31,12 +32,9 @@ env:
   REASON: ${{ github.event.inputs.reason }}
   AWS_REGION: ${{ github.event.inputs.awsRegion }}
   NEW_STACK_NAME: ${{ github.event.inputs.stackName }}
-  DEV_AWS_ACCESS_KEY_ID: ${{ secrets.GHA_DEV_AWS_ACCESS_KEY }}
-  DEV_AWS_SECRET_ACCESS_KEY: ${{ secrets.GHA_DEV_AWS_SECRET_KEY }}
-  STAGING_AWS_ACCESS_KEY_ID: ${{ secrets.GHA_STAGING_AWS_ACCESS_KEY }}
-  STAGING_AWS_SECRET_ACCESS_KEY: ${{ secrets.GHA_STAGING_AWS_SECRET_KEY }}
-  PROD_AWS_ACCESS_KEY_ID: ${{ secrets.GHA_PROD_AWS_ACCESS_KEY }}
-  PROD_AWS_SECRET_ACCESS_KEY: ${{ secrets.GHA_PROD_AWS_SECRET_KEY }}
+  DEV_ROLE_ARN: arn:aws:iam::210944367560:role/github-actions-oidc
+  STAGING_ROLE_ARN: arn:aws:iam::888736119939:role/github-actions-oidc
+  PROD_ROLE_ARN: arn:aws:iam::363694354866:role/github-actions-oidc
 
 jobs:
   deploy:
@@ -47,23 +45,17 @@ jobs:
       - name: Checkout Branch
         uses: actions/checkout@v4
 
-      - name: Set dev AWS credentials
+      - name: Set dev AWS role
         if: env.ENVIRONMENT == 'dev' || env.ENVIRONMENT == 'dev-dr' || env.ENVIRONMENT == 'load'
-        run: |
-          echo "AWS_ACCESS_KEY_ID=${DEV_AWS_ACCESS_KEY_ID}" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=${DEV_AWS_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+        run: echo "OIDC_ROLE_ARN=${DEV_ROLE_ARN}" >> $GITHUB_ENV
 
-      - name: Set staging AWS credentials
+      - name: Set staging AWS role
         if: env.ENVIRONMENT == 'staging'
-        run: |
-          echo "AWS_ACCESS_KEY_ID=${STAGING_AWS_ACCESS_KEY_ID}" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=${STAGING_AWS_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+        run: echo "OIDC_ROLE_ARN=${STAGING_ROLE_ARN}" >> $GITHUB_ENV
 
-      - name: Set prod AWS credentials
+      - name: Set prod AWS role
         if: env.ENVIRONMENT == 'prod' || env.ENVIRONMENT == 'prod-dr'
-        run: |
-          echo "AWS_ACCESS_KEY_ID=${PROD_AWS_ACCESS_KEY_ID}" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=${PROD_AWS_SECRET_ACCESS_KEY}" >> $GITHUB_ENV
+        run: echo "OIDC_ROLE_ARN=${PROD_ROLE_ARN}" >> $GITHUB_ENV
 
       - name: Install dependencies
         shell: bash
@@ -90,6 +82,12 @@ jobs:
 
       - name: Configure AWS Region
         run: echo "AWS_DEFAULT_REGION=${{ env.AWS_REGION }}" >> $GITHUB_ENV
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.OIDC_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Run deploy (default stackname)
         if: env.NEW_STACK_NAME == '-'
