@@ -1,25 +1,38 @@
 PROJECT_ROOT = $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
-DOCKER_IMAGE ?= lambci/lambda-base-2:build
+# Build environment defined by ./Dockerfile. Override BASE_IMAGE to compile
+# against a different Amazon Linux base instead of editing the Dockerfile.
+BASE_IMAGE ?= public.ecr.aws/amazonlinux/amazonlinux:2023
+DOCKER_IMAGE ?= imagemagick-lambda-build
+# Lambda layers are architecture specific. Pinning the platform stops an arm64
+# development machine from silently producing a layer that x86_64 functions
+# cannot load.
+DOCKER_PLATFORM ?= linux/amd64
 TARGET ?=/opt/
 
 MOUNTS = -v $(PROJECT_ROOT):/var/task \
 	-v $(PROJECT_ROOT)result:$(TARGET)
 
-DOCKER = docker run -t --rm -w=/var/task/build
-build result: 
+DOCKER = docker run --platform=$(DOCKER_PLATFORM) -t --rm -w=/var/task/build
+
+.PHONY: image all libs clean list-formats bash
+
+image:
+	docker build --platform=$(DOCKER_PLATFORM) --build-arg BASE_IMAGE=$(BASE_IMAGE) -t $(DOCKER_IMAGE) $(PROJECT_ROOT)
+
+build result:
 	mkdir $@
 
 clean:
 	rm -rf build result
 
-list-formats:
+list-formats: image
 	$(DOCKER) $(MOUNTS) --entrypoint /opt/bin/identify -t $(DOCKER_IMAGE) -list format
 
-bash:
-	$(DOCKER) $(MOUNTS) --entrypoint /bin/bash -t $(DOCKER_IMAGE)
+bash: image
+	$(DOCKER) -i $(MOUNTS) --entrypoint /bin/bash -t $(DOCKER_IMAGE)
 
-all libs: 
+all libs: image
 	$(DOCKER) $(MOUNTS) --entrypoint /usr/bin/make -t $(DOCKER_IMAGE) TARGET_DIR=$(TARGET) -f ../Makefile_ImageMagick $@
 
 

@@ -1,7 +1,8 @@
 AWSTemplateFormatVersion: 2010-09-09
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Example project demonstrating the usage of the ImageMagic Layer for AWS Linux 2 runtimes.
+  Example project demonstrating the usage of the ImageMagick Layer
+  on Amazon Linux 2023 Lambda runtimes.
 
 Parameters:
   ImageMagickLayer:
@@ -28,7 +29,7 @@ Resources:
       Handler: index.handler
       Timeout: 180
       MemorySize: 1024
-      Runtime: nodejs10.x
+      Runtime: nodejs24.x
       CodeUri: src
       Layers:
         - !Ref ImageMagickLayer
@@ -55,4 +56,3 @@ Outputs:
     ResultsBucket:
       Description: "Results S3 bucket"
       Value: !Ref ResultsBucket
-

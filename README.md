@@ -1,8 +1,10 @@
 # ImageMagick for AWS Lambda
 
-Scripts to compile ImageMagick utilities for AWS Lambda instances powered by Amazon Linux 2.x, such as the `nodejs10.x` or `nodejs12.x` or `python 3.8` runtime, and the updated 2018.03 Amazon Linux 1 runtimes. 
+Scripts to compile ImageMagick utilities for AWS Lambda instances powered by Amazon Linux 2023, such as the `nodejs22.x`, `nodejs24.x`, `python3.13` or `provided.al2023` runtimes.
 
-Amazon Linux 2 instances for Lambda no longer contain system utilities, so `convert`, `mogrify` and `identify` from the [ImageMagick](https://imagemagick.org) package are no longer available. 
+Amazon Linux instances for Lambda no longer contain system utilities, so `convert`, `mogrify` and `identify` from the [ImageMagick](https://imagemagick.org) package are no longer available.
+
+> **Compatibility:** the binaries are compiled on Amazon Linux 2023 (glibc 2.34) for `x86_64`, which covers every currently supported Lambda runtime. The remaining Amazon Linux 2 runtimes (`python3.10`/`python3.11`, `java8.al2`/`java11`/`java17` on AL2, `provided.al2`) and `arm64` functions are **not** supported - use layer version 1.x for those.
 
 ## PTI Specific Usage
 First, make sure you have the proper amazon credentials setup. Then run: 
@@ -31,7 +33,7 @@ For manual deployments and custom builds, read below...
 
 There are two `make` scripts in this project.
 
-* [`Makefile`](Makefile) is intended to run on the build system, and just starts a Docker container matching the AWS Linux 2 environment for Lambda runtimes to compile ImageMagick using the second script.
+* [`Makefile`](Makefile) is intended to run on the build system, and just starts a Docker container matching the Amazon Linux 2023 environment for Lambda runtimes to compile ImageMagick using the second script.
 * [`Makefile_ImageMagick`](Makefile_ImageMagick) is the script that will run inside the container, and actually compile binaries. 
 
 The output will be in the `result` dir.
@@ -40,7 +42,11 @@ The output will be in the `result` dir.
 
 By default, this compiles a version expecting to run as a Lambda layer from `/opt`. You can change the expected location by providing a `TARGET` variable when invoking `make`.
 
-The default Docker image used is `lambci/lambda-base-2:build`. To use a different base, provide a `DOCKER_IMAGE` variable when invoking `make`.
+The build runs inside the container defined by [`Dockerfile`](Dockerfile), based on `public.ecr.aws/amazonlinux/amazonlinux:2023`. Useful overrides when invoking `make`:
+
+* `BASE_IMAGE=<image>` - compile against a different Amazon Linux base image
+* `DOCKER_IMAGE=<tag>` - change the tag given to the locally built image
+* `DOCKER_PLATFORM=linux/arm64` - build for arm64 functions instead of the default `linux/amd64`. If you do, update `CompatibleArchitectures` in [`template.yaml`](template.yaml) too.
 
 Modify the versions of libraries or ImageMagick directly in [`Makefile_ImageMagick`](Makefile_ImageMagick).
 
@@ -60,6 +66,26 @@ These libraries are currently bundled:
 * libjpeg
 * openjpeg2
 * libwebp
+* libbzip2
+* libde265 and libheif (HEIC/HEIF)
+* Little CMS 2 (colour management)
+
+Current versions, all pinned at the top of [`Makefile_ImageMagick`](Makefile_ImageMagick):
+
+| Component | Version |
+| --- | --- |
+| ImageMagick | 7.1.2-35 |
+| libpng | 1.6.59 |
+| libjpeg | 9f |
+| libtiff | 4.7.2 |
+| openjpeg2 | 2.5.4 |
+| libwebp | 1.6.0 |
+| libbzip2 | 1.0.8 |
+| libheif | 1.23.7 |
+| libde265 | 1.1.3 |
+| Little CMS 2 | 2.20 |
+
+Every pull request rebuilds the layer in CI ([`ci.yml`](.github/workflows/ci.yml)) and runs the resulting binaries inside the Amazon Linux 2023 runtime image, so a version bump that no longer compiles or no longer runs on Lambda is caught before merge.
 
 ## Deploying to AWS as a layer
 
