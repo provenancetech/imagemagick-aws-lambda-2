@@ -1,9 +1,9 @@
 AWSTemplateFormatVersion: 2010-09-09
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  Static build of ImageMagick for Amazon Linux 2,
+  Static build of ImageMagick for Amazon Linux 2023 Lambda runtimes,
   including convert, mogrify and identify tools
-  and support for jpeg, gif, png, tiff and webm formats.
+  and support for jpeg, gif, png, tiff, webp, heic and jp2 formats.
 
   Check out https://github.com/serverlesspub/imagemagick-aws-lambda-2
   for more information.
@@ -12,12 +12,27 @@ Resources:
     Type: AWS::Serverless::LayerVersion
     Properties:
       LayerName: image-magick
-      Description: Static build of ImageMagick for AWS Linux 2,
+      Description: Static build of ImageMagick for Amazon Linux 2023,
       ContentUri: /tmp/layer.zip
+      # The binaries are compiled on Amazon Linux 2023 (glibc 2.34) for x86_64,
+      # so they run on every AL2023 runtime but not on the retired Amazon Linux
+      # 2 runtimes, nor on arm64 functions.
+      CompatibleArchitectures:
+        - x86_64
       CompatibleRuntimes:
-        - nodejs10.x
-        - nodejs12.x
-        - python3.8
+        - provided.al2023
+        - python3.12
+        - python3.13
+        - python3.14
+        - nodejs22.x
+        - nodejs24.x
+        - java21
+        - java25
+        - dotnet8
+        - dotnet10
+        - ruby3.3
+        - ruby3.4
+        - ruby4.0
       LicenseInfo: https://imagemagick.org/script/license.php
       RetentionPolicy: Retain
 
@@ -36,16 +51,16 @@ Metadata:
   AWS::ServerlessRepo::Application:
     Name: image-magick-lambda-layer
     Description: >
-      Static build of ImageMagick for Amazon Linux 2,
-      packaged as a Lambda layer. Bundles ImageMagick 7.0.8-45.
+      Static build of ImageMagick for Amazon Linux 2023,
+      packaged as a Lambda layer. Bundles ImageMagick 7.1.2-35.
 
       Including convert, mogrify and identify tools
-      and support for jpeg, gif, png, tiff and webm formats.
+      and support for jpeg, gif, png, tiff, webp, heic and jp2 formats.
     Author: Gojko Adzic
     SpdxLicenseId: ImageMagick
     LicenseUrl: LICENSE.txt
     ReadmeUrl: README-SAR.md 
     Labels: ['layer', 'image', 'lambda', 'imagemagick']
     HomePageUrl: https://github.com/serverlesspub/imagemagick-aws-lambda-2
-    SemanticVersion: 1.0.0
+    SemanticVersion: 2.0.0
     SourceCodeUrl: https://github.com/serverlesspub/imagemagick-aws-lambda-2

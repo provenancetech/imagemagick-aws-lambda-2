@@ -1,0 +1,10 @@
+# The Dockerfile only installs packages (it never COPYs from the working
+# tree), but Docker still tars the whole context on every build - and build/
+# holds every downloaded source tree plus the compile cache.
+build
+result
+.git
+.idea
+*.zip
+output.yaml
+.samcli
