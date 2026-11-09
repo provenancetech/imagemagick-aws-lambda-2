@@ -15,7 +15,7 @@ MOUNTS = -v $(PROJECT_ROOT):/var/task \
 
 DOCKER = docker run --platform=$(DOCKER_PLATFORM) -t --rm -w=/var/task/build
 
-.PHONY: image all libs clean list-formats bash
+.PHONY: image all libs clean list-formats bash base-image
 
 image:
 	docker build --platform=$(DOCKER_PLATFORM) --build-arg BASE_IMAGE=$(BASE_IMAGE) -t $(DOCKER_IMAGE) $(PROJECT_ROOT)
@@ -34,6 +34,17 @@ bash: image
 
 all libs: image
 	$(DOCKER) $(MOUNTS) --entrypoint /usr/bin/make -t $(DOCKER_IMAGE) TARGET_DIR=$(TARGET) -f ../Makefile_ImageMagick $@
+
+# Toolchain-only base image for consumer functions:
+#   COPY --from=<registry>/provenancetech/tools/imagemagick-lambda-base:<tag> /opt /opt
+# The context is result/ on purpose - .dockerignore excludes result/ from the
+# default context (it would bloat the build-environment image's context), so
+# building with `.` as context would produce an image with an empty /opt.
+BASE_IMAGE_NAME ?= imagemagick-lambda-base
+BASE_IMAGE_TAG ?= 2.0.0
+
+base-image: all
+	docker build --platform=$(DOCKER_PLATFORM) -f Dockerfile.base -t $(BASE_IMAGE_NAME):$(BASE_IMAGE_TAG) result/
 
 
 STACK_NAME ?= imagemagick-layer 
