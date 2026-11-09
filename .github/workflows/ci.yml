@@ -27,30 +27,6 @@ jobs:
         # Runs the freshly built binaries inside the AL2023 runtime image
         # (glibc 2.34, no compiler): a symbol or shared library the runtime
         # does not provide would only surface at invoke time otherwise.
-        run: |
-          docker run --rm --platform=linux/amd64 \
-            -v "$PWD/result:/opt:ro" \
-            -v "$PWD/src:/src:ro" \
-            --entrypoint bash public.ecr.aws/lambda/provided:al2023 \
-            -c 'set -e
-                /opt/bin/identify -version
-                /opt/bin/identify /src/test.jpg
-                /opt/bin/convert /src/test.jpg -resize 100x /tmp/thumb.png
-                /opt/bin/identify /tmp/thumb.png
-
-                # ImageMagick configure degrades to "no delegate" when
-                # pkg-config cannot find a library, and a make recipe whose
-                # install path is wrong still exits 0. Both produce a binary
-                # that runs fine but has silently lost format support, so
-                # assert the delegates this layer ships instead.
-                delegates=$(/opt/bin/identify -version | sed -n "s/^Delegates (built-in): //p")
-                echo "delegates: $delegates"
-                for name in bzlib heic jp2 jpeg lcms png tiff webp zlib; do
-                  case " $delegates " in
-                    *" $name "*) ;;
-                    *) echo "missing delegate: ${name}"; exit 1 ;;
-                  esac
-                done
-                # GIF is built into ImageMagick rather than delegated.
-                /opt/bin/identify -list format | grep -qE "^[[:space:]]+GIF[*]?([[:space:]]|$)"
-                echo "all expected delegates present"'
+        # The delegate assertions live in bin/verify-layer.sh, shared with the
+        # base-image workflow (which runs the same check for arm64).
+        run: .github/workflows/bin/verify-layer.sh linux/amd64

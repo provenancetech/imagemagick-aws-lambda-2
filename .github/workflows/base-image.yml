@@ -14,6 +14,7 @@ on:
       - Makefile
       - Makefile_ImageMagick
       - .github/workflows/base-image.yml
+      - .github/workflows/bin/verify-layer.sh
   workflow_dispatch:
     inputs:
       tag:
@@ -23,43 +24,118 @@ on:
 
 env:
   AWS_REGION: us-west-2
-  ECR_REGISTRY: 210944367560.dkr.ecr.us-west-2.amazonaws.com
-  ECR_REPOSITORY: provenancetech/tools/imagemagick-lambda-base
+  BASE_REPOSITORY: provenancetech/tools/imagemagick-lambda-base
 
 jobs:
   build:
-    name: Compile toolchain and push base image
+    name: Compile, verify and publish arm64 base image
     runs-on: ubuntu-latest
+    # The arm64 toolchain compiles under QEMU emulation on this amd64 runner
+    # and is several times slower than a native build (~4 min native).
+    timeout-minutes: 180
 
     steps:
       - name: Checkout Branch
         uses: actions/checkout@v7
 
-      - name: Configure AWS credentials
+      - name: Set up QEMU for the arm64 build
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Configure dev AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: arn:aws:iam::210944367560:role/github-actions-oidc
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Compile toolchain and build base image
+      - name: Compile and verify arm64 toolchain
         shell: bash
         run: |
-          # The pinned tag is what consumers reference; the sha tag exists so
-          # any deployed /opt can be traced back to an exact commit even after
-          # the pinned tag is rebuilt.
-          VERSION_TAG="${{ github.event.inputs.tag || '2.0.0' }}"
-          make base-image \
-            BASE_IMAGE_NAME="$ECR_REGISTRY/$ECR_REPOSITORY" \
-            BASE_IMAGE_TAG="$VERSION_TAG"
-          docker tag "$ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG" \
-            "$ECR_REGISTRY/$ECR_REPOSITORY:sha-$(git rev-parse --short HEAD)"
+          make clean
+          make all DOCKER_PLATFORM=linux/arm64
+          .github/workflows/bin/verify-layer.sh linux/arm64
 
-      - name: Login to the registry
+      - name: Login to dev registry
+        id: dev-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Push base image
+      - name: Build and push base image to dev
         shell: bash
         run: |
           VERSION_TAG="${{ github.event.inputs.tag || '2.0.0' }}"
-          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG"
-          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:sha-$(git rev-parse --short HEAD)"
+          SHA_TAG="sha-$(git rev-parse --short HEAD)"
+          REGISTRY="${{ steps.dev-login.outputs.registry }}"
+          make base-image \
+            DOCKER_PLATFORM=linux/arm64 \
+            BASE_IMAGE_NAME="$REGISTRY/$BASE_REPOSITORY" \
+            BASE_IMAGE_TAG="$VERSION_TAG"
+          docker push "$REGISTRY/$BASE_REPOSITORY:$VERSION_TAG"
+          # The sha tag keeps the exact source commit traceable after the
+          # pinned tag is rebuilt.
+          docker tag "$REGISTRY/$BASE_REPOSITORY:$VERSION_TAG" "$REGISTRY/$BASE_REPOSITORY:$SHA_TAG"
+          docker push "$REGISTRY/$BASE_REPOSITORY:$SHA_TAG"
+
+      # The function image is built per target account at deploy time and its
+      # Dockerfile pulls the base from the registry of that account, so every
+      # account needs its own copy. Copying (rather than rebuilding) keeps all
+      # three byte-identical.
+      - name: Configure staging AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::888736119939:role/github-actions-oidc
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Publish base image to staging ECR
+        shell: bash
+        run: |
+          aws ecr describe-repositories --repository-names "$BASE_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 ||
+            aws ecr create-repository --repository-name "$BASE_REPOSITORY" --region "$AWS_REGION" >/dev/null
+
+      - name: Login to staging registry
+        id: staging-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Copy base image to staging
+        shell: bash
+        run: |
+          VERSION_TAG="${{ github.event.inputs.tag || '2.0.0' }}"
+          SHA_TAG="sha-$(git rev-parse --short HEAD)"
+          DEV_REG="${{ steps.dev-login.outputs.registry }}"
+          DST_REG="${{ steps.staging-login.outputs.registry }}"
+          docker buildx imagetools create \
+            -t "$DST_REG/$BASE_REPOSITORY:$VERSION_TAG" \
+            "$DEV_REG/$BASE_REPOSITORY:$VERSION_TAG"
+          docker buildx imagetools create \
+            -t "$DST_REG/$BASE_REPOSITORY:$SHA_TAG" \
+            "$DEV_REG/$BASE_REPOSITORY:$VERSION_TAG"
+
+      - name: Configure prod AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::363694354866:role/github-actions-oidc
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Publish base image to prod ECR
+        shell: bash
+        run: |
+          aws ecr describe-repositories --repository-names "$BASE_REPOSITORY" --region "$AWS_REGION" >/dev/null 2>&1 ||
+            aws ecr create-repository --repository-name "$BASE_REPOSITORY" --region "$AWS_REGION" >/dev/null
+
+      - name: Login to prod registry
+        id: prod-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Copy base image to prod
+        shell: bash
+        run: |
+          VERSION_TAG="${{ github.event.inputs.tag || '2.0.0' }}"
+          SHA_TAG="sha-$(git rev-parse --short HEAD)"
+          DEV_REG="${{ steps.dev-login.outputs.registry }}"
+          DST_REG="${{ steps.prod-login.outputs.registry }}"
+          docker buildx imagetools create \
+            -t "$DST_REG/$BASE_REPOSITORY:$VERSION_TAG" \
+            "$DEV_REG/$BASE_REPOSITORY:$VERSION_TAG"
+          docker buildx imagetools create \
+            -t "$DST_REG/$BASE_REPOSITORY:$SHA_TAG" \
+            "$DEV_REG/$BASE_REPOSITORY:$VERSION_TAG"
