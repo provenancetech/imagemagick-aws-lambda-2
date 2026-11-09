@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # Keep the workflow actions current so the build and deploy pipelines do
+  # not drift onto deprecated Node runtimes.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+
+  # Python packages used by .github/workflows (AWS CLI helpers).
+  - package-ecosystem: pip
+    directory: "/.github/workflows"
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+
+  # Base image for the build container in ./Dockerfile.
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
