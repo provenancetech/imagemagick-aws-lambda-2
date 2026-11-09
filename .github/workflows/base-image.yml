@@ -3,6 +3,7 @@ name: Build and push toolchain base image
 permissions:
   contents: read
   id-token: write
+  actions: read
 
 on:
   push:
@@ -27,21 +28,49 @@ env:
   BASE_REPOSITORY: provenancetech/tools/imagemagick-lambda-base
 
 jobs:
+  # The arm64 toolchain compiles natively on a self-hosted Graviton runner
+  # (same start/build/stop pattern the rest of the fleet builds images with)
+  # instead of QEMU emulation on a hosted amd64 runner.
+  start-runner:
+    name: Start self-hosted EC2 runner
+    runs-on: ubuntu-24.04
+    if: github.actor != 'dependabot[bot]'
+    outputs:
+      label: ${{ steps.start-ec2-runner.outputs.label }}
+      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::210944367560:role/github-actions-oidc
+          aws-region: us-west-2
+
+      - name: Start EC2 runner
+        id: start-ec2-runner
+        uses: provenancetech/ec2-github-runner@v2.3.7
+        with:
+          mode: start
+          github-token: ${{ secrets.CI_TOKEN }}
+          ec2-try-spot-first: false
+          ec2-launch-params: |
+            ImageId: ami-0e5a8852d22abdb12
+            InstanceType: m6g.xlarge
+            SecurityGroupIds: [ sg-0c89ec3b538c5a154 ]
+            BlockDeviceMappings:
+            - DeviceName: "/dev/sda1"
+              Ebs:
+                VolumeSize: 32
+
   build:
     name: Compile, verify and publish arm64 base image
-    runs-on: ubuntu-latest
-    # The arm64 toolchain compiles under QEMU emulation on this amd64 runner
-    # and is several times slower than a native build (~4 min native).
-    timeout-minutes: 180
+    needs: [ start-runner ]
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ${{ needs.start-runner.outputs.label }}
+    timeout-minutes: 60
 
     steps:
       - name: Checkout Branch
         uses: actions/checkout@v7
-
-      - name: Set up QEMU for the arm64 build
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
 
       - name: Configure dev AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -139,3 +168,27 @@ jobs:
           docker buildx imagetools create \
             -t "$DST_REG/$BASE_REPOSITORY:$SHA_TAG" \
             "$DEV_REG/$BASE_REPOSITORY:$VERSION_TAG"
+
+  stop-runner:
+    name: Stop self-hosted EC2 runner
+    needs:
+      - start-runner
+      - build
+    runs-on: ubuntu-24.04
+    # Stop the runner even if the build failed, so a broken build never
+    # leaves an instance running.
+    if: ${{ always() && github.actor != 'dependabot[bot]' }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::210944367560:role/github-actions-oidc
+          aws-region: us-west-2
+
+      - name: Stop EC2 runner
+        uses: provenancetech/ec2-github-runner@v2.3.7
+        with:
+          mode: stop
+          github-token: ${{ secrets.CI_TOKEN }}
+          label: ${{ needs.start-runner.outputs.label }}
+          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}
