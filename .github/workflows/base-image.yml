@@ -1,0 +1,65 @@
+name: Build and push toolchain base image
+
+permissions:
+  contents: read
+  id-token: write
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - Dockerfile
+      - Dockerfile.base
+      - Makefile
+      - Makefile_ImageMagick
+      - .github/workflows/base-image.yml
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Pinned version tag for the base image (e.g. 2.0.0)'
+        required: false
+        default: '2.0.0'
+
+env:
+  AWS_REGION: us-west-2
+  ECR_REGISTRY: 210944367560.dkr.ecr.us-west-2.amazonaws.com
+  ECR_REPOSITORY: provenancetech/tools/imagemagick-lambda-base
+
+jobs:
+  build:
+    name: Compile toolchain and push base image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Branch
+        uses: actions/checkout@v7
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::210944367560:role/github-actions-oidc
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Compile toolchain and build base image
+        shell: bash
+        run: |
+          # The pinned tag is what consumers reference; the sha tag exists so
+          # any deployed /opt can be traced back to an exact commit even after
+          # the pinned tag is rebuilt.
+          VERSION_TAG="${{ github.event.inputs.tag || '2.0.0' }}"
+          make base-image \
+            BASE_IMAGE_NAME="$ECR_REGISTRY/$ECR_REPOSITORY" \
+            BASE_IMAGE_TAG="$VERSION_TAG"
+          docker tag "$ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG" \
+            "$ECR_REGISTRY/$ECR_REPOSITORY:sha-$(git rev-parse --short HEAD)"
+
+      - name: Login to the registry
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push base image
+        shell: bash
+        run: |
+          VERSION_TAG="${{ github.event.inputs.tag || '2.0.0' }}"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:sha-$(git rev-parse --short HEAD)"

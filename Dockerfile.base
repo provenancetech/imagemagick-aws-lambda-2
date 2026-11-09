@@ -1,0 +1,20 @@
+# Toolchain-only base image carrying the ImageMagick build produced by
+# `make all` (see README.md for what that includes: convert/mogrify/identify
+# with jpeg, gif, png, tiff, webp, heic and jp2 support).
+#
+# Build context MUST be the result/ directory - see the `base-image` target
+# in the Makefile. Building with `.` as context would silently produce an
+# empty image because .dockerignore excludes result/ (it exists to keep the
+# 107 MB build/ cache out of the build-environment image's context).
+#
+# Consumers copy /opt into a Lambda runtime image of their choice:
+#
+#   FROM public.ecr.aws/lambda/nodejs:24
+#   COPY --from=<registry>/provenancetech/tools/imagemagick-lambda-base:<tag> /opt /opt
+#
+# Deliberately FROM scratch: this image is never run, it only transports
+# /opt, so it needs no shell, no package manager and carries no CVE surface.
+# Pinning the Lambda runtime to the consumer keeps toolchain and runtime
+# upgrade cadences independent.
+FROM scratch
+COPY . /opt/
