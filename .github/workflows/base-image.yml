@@ -105,6 +105,30 @@ jobs:
           docker tag "$REGISTRY/$BASE_REPOSITORY:$VERSION_TAG" "$REGISTRY/$BASE_REPOSITORY:$SHA_TAG"
           docker push "$REGISTRY/$BASE_REPOSITORY:$SHA_TAG"
 
+      - name: Trigger image sanitizer rebuild in pti-infra
+        # The image sanitizer function image COPYs /opt out of this base
+        # image, so a base rebuild must refresh it even though the change
+        # lives in this repository - on.push.paths cannot see across repos,
+        # and pti-infra therefore listens for this repository_dispatch
+        # (build-image-sanitizer.yml) instead. github-script rather than gh:
+        # this step runs on the self-hosted runner, where the CLI may be
+        # absent, and the org token (not the repo-scoped GITHUB_TOKEN) is
+        # required to dispatch into another repository.
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.CI_TOKEN }}
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: 'provenancetech',
+              repo: 'pti-infra',
+              event_type: 'base-image-updated',
+              client_payload: {
+                version_tag: '${{ github.event.inputs.tag || '2.0.0' }}',
+                sha: context.sha,
+              },
+            });
+            core.info('Dispatched base-image-updated to provenancetech/pti-infra');
+
   stop-runner:
     name: Stop self-hosted EC2 runner
     needs:
