@@ -39,6 +39,20 @@ jobs:
       label: ${{ steps.start-ec2-runner.outputs.label }}
       ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
     steps:
+      # A public repository cannot reference an action hosted in a private
+      # one (GitHub's rule: private actions are for private repos of the org
+      # only) - hence the checkout + local path below instead of a direct
+      # `uses: provenancetech/ec2-github-runner@...`. Needs CI_TOKEN (repo
+      # secret) both to read the private action repo and for the runner
+      # registration token the action itself consumes.
+      - name: Checkout the runner action
+        uses: actions/checkout@v7
+        with:
+          repository: provenancetech/ec2-github-runner
+          ref: v2.3.7
+          token: ${{ secrets.CI_TOKEN }}
+          path: ec2-github-runner
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -47,7 +61,7 @@ jobs:
 
       - name: Start EC2 runner
         id: start-ec2-runner
-        uses: provenancetech/ec2-github-runner@v2.3.7
+        uses: ./ec2-github-runner
         with:
           mode: start
           github-token: ${{ secrets.CI_TOKEN }}
@@ -147,6 +161,16 @@ jobs:
     # leaves an instance running.
     if: ${{ always() && github.actor != 'dependabot[bot]' }}
     steps:
+      # Same vendoring as start-runner: a public repo cannot reference the
+      # private provenancetech/ec2-github-runner action directly.
+      - name: Checkout the runner action
+        uses: actions/checkout@v7
+        with:
+          repository: provenancetech/ec2-github-runner
+          ref: v2.3.7
+          token: ${{ secrets.CI_TOKEN }}
+          path: ec2-github-runner
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -154,7 +178,7 @@ jobs:
           aws-region: us-west-2
 
       - name: Stop EC2 runner
-        uses: provenancetech/ec2-github-runner@v2.3.7
+        uses: ./ec2-github-runner
         with:
           mode: stop
           github-token: ${{ secrets.CI_TOKEN }}
