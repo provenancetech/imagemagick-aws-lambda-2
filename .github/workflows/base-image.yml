@@ -72,6 +72,14 @@ jobs:
       - name: Checkout Branch
         uses: actions/checkout@v7
 
+      # Same self-bootstrap as every other EC2-runner job in the fleet (the
+      # AMI is minimal): make drives the compile, docker builds/pushes the
+      # image, git/curl/awscli are the usual suspects.
+      - name: Update OS
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git curl make docker.io awscli
+
       - name: Configure dev AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
